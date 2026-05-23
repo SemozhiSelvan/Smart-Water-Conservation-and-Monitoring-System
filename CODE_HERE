@@ -1,0 +1,143 @@
+# Smart Water Conservation and Monitoring System – Arduino Code
+
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// ---------------- PIN DEFINITIONS ----------------
+#define TRIG_PIN 9
+#define ECHO_PIN 10
+#define FLOW_SENSOR_PIN 2
+#define RELAY_PIN 7
+#define BUZZER_PIN 6
+
+// ---------------- LCD SETUP ----------------
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ---------------- VARIABLES ----------------
+volatile int flowPulseCount = 0;
+float flowRate;
+float waterLevel;
+long duration;
+float distance;
+
+// Tank height in cm
+const float tankHeight = 20.0;
+
+// ---------------- INTERRUPT FUNCTION ----------------
+void flowPulseCounter()
+{
+  flowPulseCount++;
+}
+
+void setup()
+{
+  Serial.begin(9600);
+
+  // Pin Modes
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(FLOW_SENSOR_PIN, INPUT_PULLUP);
+
+  // Relay OFF initially
+  digitalWrite(RELAY_PIN, HIGH);
+
+  // LCD Initialization
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Smart Water");
+  lcd.setCursor(0, 1);
+  lcd.print("Monitoring");
+
+  delay(2000);
+  lcd.clear();
+
+  // Flow Sensor Interrupt
+  attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), flowPulseCounter, FALLING);
+}
+
+void loop()
+{
+  // ---------------- WATER LEVEL MEASUREMENT ----------------
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  duration = pulseIn(ECHO_PIN, HIGH);
+
+  // Distance Calculation
+  distance = duration * 0.034 / 2;
+
+  // Water Level Calculation
+  waterLevel = tankHeight - distance;
+
+  if (waterLevel < 0)
+  {
+    waterLevel = 0;
+  }
+
+  // ---------------- FLOW RATE CALCULATION ----------------
+  flowPulseCount = 0;
+  delay(1000);
+
+  // Flow rate formula
+  flowRate = (flowPulseCount / 7.5);
+
+  // ---------------- DISPLAY VALUES ----------------
+  Serial.println("===== WATER MONITORING DATA =====");
+
+  Serial.print("Water Level: ");
+  Serial.print(waterLevel);
+  Serial.println(" cm");
+
+  Serial.print("Flow Rate: ");
+  Serial.print(flowRate);
+  Serial.println(" L/min");
+
+  // LCD Display
+  lcd.clear();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Level:");
+  lcd.print(waterLevel);
+  lcd.print("cm");
+
+  lcd.setCursor(0, 1);
+  lcd.print("Flow:");
+  lcd.print(flowRate);
+  lcd.print("L/m");
+
+  // ---------------- AUTOMATIC MOTOR CONTROL ----------------
+
+  // Low Water Level
+  if (waterLevel < 5)
+  {
+    digitalWrite(RELAY_PIN, LOW); // Pump ON
+    digitalWrite(BUZZER_PIN, HIGH);
+
+    Serial.println("Water Low - Pump ON");
+  }
+
+  // Tank Full
+  else if (waterLevel > 18)
+  {
+    digitalWrite(RELAY_PIN, HIGH); // Pump OFF
+    digitalWrite(BUZZER_PIN, LOW);
+
+    Serial.println("Tank Full - Pump OFF");
+  }
+
+  else
+  {
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+
+  delay(2000);
+}
